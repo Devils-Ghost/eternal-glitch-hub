@@ -45,12 +45,12 @@ const OWNERS = [
 
 const PROJECTS = [
   {
-    id: 'portfolio',
-    name: 'Portfolio',
+    id: 'dhaval-portfolio',
+    name: 'Dhaval\'s Portfolio',
     description:
-      'The long version: background, writing, and every project on this domain in proper detail.',
+      'Dhaval Tanna\'s portfolio website. It showcases his experience, projects, skills, and much more.',
     ownerId: 'dhaval',
-    type: 'frontend',
+    type: 'fullstack',
     url: 'https://dhaval-tanna.eternalglitch.com',
     host: 'vercel',
     stack: ['Next.js', 'TypeScript'],
@@ -63,7 +63,7 @@ const PROJECTS = [
     id: 'collab-code-editor',
     name: 'Collab Code Editor',
     description:
-      'Write code with someone else in the same browser tab, in real time.',
+      'A code editor that allows you to collaborate with others in real-time. It supports multiple languages.',
     ownerId: 'rutul',
     type: 'frontend',
     url: 'https://collab-code-editor.eternalglitch.com',
@@ -78,7 +78,7 @@ const PROJECTS = [
     id: 'collab-editor-api',
     name: 'Collab Editor API',
     description:
-      'The Node.js service behind the collab editor: sessions, sync, and shared document state.',
+      'This is the Node.js service behind the collab editor that handles real-time collaboration and data persistence.',
     ownerId: 'rutul',
     type: 'backend',
     url: 'https://collab-code-editor-api.eternalglitch.com',
@@ -93,15 +93,13 @@ const PROJECTS = [
     id: 'smart-society',
     name: 'Smart Society',
     description:
-      'Residential society management for an IoT disaster-alert system: member directory, contact requests, complaints, and a full admin tier.',
+      'Smart Society application for managing society members, events, and communication.',
     ownerId: 'dhaval',
     type: 'frontend',
     url: 'https://smartsociety.eternalglitch.com',
     host: 'firebase',
     stack: ['React', 'Firebase RTDB', 'Firebase Auth'],
     status: 'live',
-    // Moved Heroku → Firebase Hosting around 2023, but a migration isn't a commit.
-    // This is exactly why lastActive is manual and separate from updatedAt.
     lastActive: '2021-01-01',
     enabled: true,
     order: 4,
@@ -110,7 +108,7 @@ const PROJECTS = [
     id: 'burger-builder',
     name: 'Burger Builder',
     description:
-      'Stack a burger ingredient by ingredient, place an imaginary order, and watch it land in your order history. Full auth included.',
+      'Customize your burger: Stack a burger ingredient by ingredient and place an order. A fun project to learn React and Firebase.',
     ownerId: 'dhaval',
     type: 'frontend',
     url: 'https://burgerbuilder.eternalglitch.com',

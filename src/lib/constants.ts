@@ -9,5 +9,19 @@
  */
 export const MAP_CAP = 8;
 
-/** ISR safety net. The real mechanism is revalidatePath('/', 'layout') on mutation (D8). */
-export const REVALIDATE_SECONDS = 3600;
+/**
+ * NOTE: there is deliberately no REVALIDATE_SECONDS constant here (there was in v0.5 —
+ * it was a bug).
+ *
+ * Next.js requires `export const revalidate` to be a statically analysable literal in
+ * the route file itself. `export const revalidate = REVALIDATE_SECONDS` does not
+ * reliably work, and neither does `60 * 60`. It must be a bare number:
+ *
+ *     export const revalidate = 3600;
+ *
+ * So the ISR window is written as a literal in each page file. If you change it, change
+ * it in BOTH `app/page.tsx` and `app/[handle]/page.tsx`.
+ *
+ * The timer is only a safety net regardless — the real mechanism is
+ * revalidatePath('/', 'layout') fired from the admin route handlers (D8).
+ */

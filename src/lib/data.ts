@@ -48,12 +48,19 @@ export async function getOwners(): Promise<Owner[]> {
 /**
  * @param includeDisabled admin-only. The Admin SDK reads disabled docs for free —
  *   no rule evaluation, no /admins lookup. That's the whole point of D5.
+ *
+ * Deliberately NOT `.where('enabled','==',true).orderBy('order')`. Firestore requires
+ * a composite index the moment a query combines an equality filter with an orderBy on
+ * a DIFFERENT field — a single-field orderBy alone needs no index. At 5-30 documents,
+ * fetching everything and filtering in JS costs nothing and means one less piece of
+ * infrastructure (an index definition) to create, deploy, and remember exists. This is
+ * the same call as skipping denormalization: real projects, marginal cost.
+ * Revisit only if this collection ever reaches the hundreds.
  */
 export async function getProjects(includeDisabled = false): Promise<Project[]> {
-  let q: FirebaseFirestore.Query = db.collection(COLLECTIONS.projects);
-  if (!includeDisabled) q = q.where('enabled', '==', true);
-  const snap = await q.orderBy('order').get();
-  return snap.docs.map(toProject);
+  const snap = await db.collection(COLLECTIONS.projects).orderBy('order').get();
+  const all = snap.docs.map(toProject);
+  return includeDisabled ? all : all.filter((p) => p.enabled);  
 }
 
 /**

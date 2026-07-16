@@ -5,8 +5,8 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 
 /**
  * The Admin SDK bypasses Firestore security rules entirely (D5, D6).
- * That is exactly why our rules are deny-all and why this file must never
- * reach a browser. The `server-only` import above enforces that at build time.
+ * That is exactly why Firestore rules are deny-all and why this file must never
+ * reach a browser. The `server-only` import enforces that at build time.
  */
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -23,8 +23,6 @@ function getAdminApp(): App {
     credential: cert({
       projectId: requireEnv('FIREBASE_PROJECT_ID'),
       clientEmail: requireEnv('FIREBASE_CLIENT_EMAIL'),
-      // The private key arrives with literal backslash-n because .env files
-      // cannot hold real newlines. This bites everyone exactly once.
       privateKey: requireEnv('FIREBASE_PRIVATE_KEY').replace(/\\n/g, '\n'),
     }),
   });

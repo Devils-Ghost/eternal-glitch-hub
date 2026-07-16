@@ -7,7 +7,7 @@ export type ProjectType = 'frontend' | 'backend' | 'fullstack';
  *   live     — deployed and reachable
  *   wip      — deployed but rough; sets expectations
  *   archived — not running, not being rescued (e.g. a free tier died)
- * How recently you worked on it is `lastActive`, which is independent of all three.
+ * How recently the project was worked on is `lastActive`, which is independent of all three.
  */
 export type ProjectStatus = 'live' | 'wip' | 'archived';
 
