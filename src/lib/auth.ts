@@ -1,12 +1,31 @@
 import 'server-only';
 
-import { adminAuth } from './firebase-admin';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 /**
  * THE security gate (D5). Every mutation route handler calls this first.
  * There is exactly one of these on purpose — one place to reason about, one place
  * to get wrong. If you add a route that writes and forget to call this, the route
  * is public. Grep for `verifyAdmin` before shipping any new handler.
+ *
+ * ── Why this doesn't use firebase-admin/auth ──────────────────────────────────
+ * firebase-admin/auth → jwks-rsa → jose. jose has been ESM-only since v6, but
+ * jwks-rsa still pulls it in with a CommonJS require(). Node 22.12+/24 allows
+ * require(esm) natively, so this works locally — but Vercel's Lambda runtime
+ * patches Node's module loader (`/opt/rust/nodejs.js`, `Module._load`) and that
+ * shim does NOT implement require(esm). Result: ERR_REQUIRE_ESM on Vercel only,
+ * unfixable from our side.
+ *
+ * Ruled out along the way, don't retry these:
+ *   - serverExternalPackages: no-op, firebase-admin is already a Next default external
+ *   - Node 24 on Vercel: already set; the runtime shim is the blocker, not Node
+ *   - next build --webpack: bundler was never the cause; error survived the switch
+ *
+ * So we verify the ID token ourselves. jose is the library at the bottom of that
+ * whole chain anyway — we just import it as the ESM it actually is. This is ~40
+ * lines and removes the entire problem class.
+ *
+ * firebase-admin stays for Firestore, which never touches jose.
  */
 
 export class AuthError extends Error {
@@ -19,6 +38,32 @@ export class AuthError extends Error {
   }
 }
 
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+
+/**
+ * Google's public keys for Firebase ID tokens, in JWKS format.
+ *
+ * ⚠️ NOT the /metadata/x509/ URL that Firebase's docs mention — that endpoint serves
+ * raw X.509 certs, which createRemoteJWKSet cannot parse. This is the JWKS one.
+ *
+ * Module-scope on purpose: createRemoteJWKSet caches the keys in memory and handles
+ * refresh + rotation itself. Constructing it per-request would refetch every time.
+ */
+const JWKS = createRemoteJWKSet(
+  new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')
+);
+
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env var: ${name}`);
+  return v;
+}
+
 function adminUids(): string[] {
   return (process.env.ADMIN_UIDS ?? '')
     .split(',')
@@ -27,12 +72,11 @@ function adminUids(): string[] {
 }
 
 /**
- * Verifies the Firebase ID token and checks the UID against the ADMIN_UIDS allowlist.
+ * Verifies a Firebase ID token and checks the UID against the ADMIN_UIDS allowlist.
  *
- * Why an env allowlist and not custom claims: the bootstrap problem (you'd need an
- * out-of-band way to set the first claim) plus up-to-1h revocation lag while the token
- * refreshes. At two admins, "paste a UID into Vercel and redeploy" wins. Migrate at 5+
- * or if membership churns.
+ * jwtVerify checks the signature against Google's rotating public keys, plus exp,
+ * iat, iss and aud. Per Firebase's spec, iss must be securetoken.google.com/<projectId>,
+ * aud must be the project ID, and sub is the uid.
  *
  * @returns the verified admin's UID
  * @throws AuthError
@@ -44,12 +88,29 @@ export async function verifyAdmin(req: Request): Promise<string> {
   }
 
   const token = header.slice('Bearer '.length);
+  const projectId = requireEnv('FIREBASE_PROJECT_ID');
 
   let uid: string;
   try {
-    // Checks the signature, expiry, issuer, and audience. Not decorative.
-    const decoded = await adminAuth.verifyIdToken(token);
-    uid = decoded.uid;
+    const { payload } = await jwtVerify(token, JWKS, {
+      issuer: `https://securetoken.google.com/${projectId}`,
+      audience: projectId,
+      algorithms: ['RS256'],
+    });
+
+    // Firebase requires sub to be a non-empty string; it is the uid.
+    if (typeof payload.sub !== 'string' || payload.sub === '') {
+      throw new Error('Token has no subject');
+    }
+
+    // Firebase also requires auth_time to be in the past — jose doesn't know this
+    // claim, so we check it ourselves.
+    const authTime = payload.auth_time;
+    if (typeof authTime === 'number' && authTime > Date.now() / 1000) {
+      throw new Error('Token auth_time is in the future');
+    }
+
+    uid = payload.sub;
   } catch {
     throw new AuthError('Invalid or expired token', 401);
   }
@@ -82,11 +143,4 @@ export function errorResponse(e: unknown): Response {
     { error: isValidation ? message : 'Internal error' },
     { status: isValidation ? 400 : 500 }
   );
-}
-
-export class ValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ValidationError';
-  }
 }

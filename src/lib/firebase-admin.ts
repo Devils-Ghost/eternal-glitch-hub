@@ -2,7 +2,6 @@ import 'server-only'; // build-time guard: importing this from a client componen
 
 import { initializeApp, getApps, cert, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
-import { getAuth, type Auth } from 'firebase-admin/auth';
 
 /**
  * The Admin SDK bypasses Firestore security rules entirely (D5, D6).
@@ -31,12 +30,12 @@ function getAdminApp(): App {
   });
 }
 
-const app = getAdminApp();
+export const db: Firestore = getFirestore(getAdminApp());
 
-export const db: Firestore = getFirestore(app);
-
-/** Used by verifyAdmin() to check ID tokens. Same app instance, same credentials. */
-export const adminAuth: Auth = getAuth(app);
+// NOTE: deliberately no `firebase-admin/auth` export here.
+// Importing it drags in jwks-rsa -> jose, which breaks on Vercel's Lambda runtime.
+// Token verification lives in lib/auth.ts using jose directly. See the comment there
+// before you re-add it. This file is Firestore only.
 
 export const COLLECTIONS = {
   projects: 'projects',
