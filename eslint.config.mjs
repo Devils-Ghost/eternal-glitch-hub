@@ -13,6 +13,23 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Honour the _-prefix convention for intentionally discarded bindings.
+  // Last entry wins in flat config, so this must stay after the extends above.
+  // Lets us write `const { id: _id, ...rest } = project` — discarding a field on purpose
+  // rather than rebuilding the object field-by-field, which silently goes stale the next
+  // time we add a field to Project.
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

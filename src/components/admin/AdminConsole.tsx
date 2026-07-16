@@ -25,15 +25,6 @@ export function AdminConsole() {
   const [editing, setEditing] = useState<Project | "new" | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(
-    () =>
-      onAuthStateChanged(auth, (u) => {
-        setUser(u);
-        if (!u) router.replace("/admin/login");
-      }),
-    [router],
-  );
-
   const load = useCallback(async () => {
     try {
       setError(null);
@@ -47,9 +38,24 @@ export function AdminConsole() {
     }
   }, []);
 
-  useEffect(() => {
-    if (user) load();
-  }, [user, load]);
+  // onAuthStateChanged IS the external subscription, so setState in its callback is the
+  // sanctioned pattern — unlike setState in an effect BODY, which cascades renders.
+  //
+  // This was two effects (subscribe, then fetch-when-user-appears) and react-hooks was
+  // right to flag it: load() calls setError(null) synchronously before its first await,
+  // so the chain was setUser -> rerender -> effect -> load() -> rerender. Folding the
+  // fetch into the auth callback does both in one pass and drops a render.
+  //
+  // `load` is useCallback([], stable), so listing it here doesn't re-subscribe.
+  useEffect(
+    () =>
+      onAuthStateChanged(auth, (u) => {
+        setUser(u);
+        if (u) void load();
+        else router.replace("/admin/login");
+      }),
+    [router, load],
+  );
 
   async function mutate(fn: () => Promise<unknown>) {
     setBusy(true);
