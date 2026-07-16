@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// Deny-all is the INTENDED FINAL STATE, not a placeholder (D6).
+//
+// Security rules only govern the client SDKs (web/iOS/Android). The Admin SDK
+// authenticates with a service account and bypasses them entirely — so this
+// locks out every browser on earth while our Next.js route handlers are
+// unaffected. All reads and writes go through the server (D5).
+//
+// If you ever find yourself loosening this, re-read D5 first: the reason we're
+// server-only is that rules reject rather than filter, the admin panel needs to
+// read disabled docs, and validating "description <= 180 chars" in this DSL is
+// miserable. Loosening these rules brings all three problems back.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
