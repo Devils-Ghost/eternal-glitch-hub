@@ -1,141 +1,164 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Owner, ProjectWithOwner } from "@/lib/types";
-import { isVisitable } from "@/lib/types";
+import { FilterBar } from "./FilterBar";
+import { ProjectRow } from "./ProjectRow";
 
-/**
- * M2: CORRECT AND BORING. There is deliberately zero styling here.
- *
- * The design pass is M4 — tokens, the topology map, search, accent retune, motion.
- * Building the design against real data is the whole reason M2 comes first; design
- * against dummy data and it flatters descriptions that are the wrong length and a
- * project count that's wrong.
- *
- * Client component because the owner filter is client state (D16). In M4 this gains
- * history.pushState so the URL tracks the filter — right now toggling the filter
- * changes the list but NOT the address bar. Known gap, not a bug.
- */
+const NEUTRAL_ACCENT = "#7C839B";
 
-interface HubProps {
+function matches(p: ProjectWithOwner, q: string) {
+  if (!q) return true;
+  const hay = `${p.name} ${p.description} ${p.stack.join(" ")} ${p.host} ${p.owner.displayName}`;
+  return hay.toLowerCase().includes(q.toLowerCase());
+}
+
+export function Hub({
+  owners,
+  projects,
+  initialOwner,
+}: {
   owners: Owner[];
   projects: ProjectWithOwner[];
   initialOwner: string | null;
-}
-
-export function Hub({ owners, projects, initialOwner }: HubProps) {
+}) {
   const [ownerHandle, setOwnerHandle] = useState<string | null>(initialOwner);
+  const [query, setQuery] = useState("");
 
-  // Archived is collapsed and out of the primary flow (D12). Zero archived at launch,
-  // so this section won't render yet — it exists for the day a free tier dies.
-  const active = projects.filter((p) => p.status !== "archived");
-  const archived = projects.filter((p) => p.status === "archived");
+  /**
+   * The filter is client state; the URL is kept in sync with history.pushState rather
+   * than by navigating. Navigating to /dhaval as a separate page would remount the tree
+   * and re-run the entry animation on every filter toggle. Typing /dhaval directly still
+   * works — that's the server route handing us a different initialOwner (D16).
+   */
+  const selectOwner = useCallback((handle: string | null) => {
+    setOwnerHandle(handle);
+    window.history.pushState(null, "", handle ? `/${handle}` : "/");
+  }, []);
 
-  const visible = ownerHandle
-    ? active.filter((p) => p.owner.handle === ownerHandle)
-    : active;
+  // Back button. Without this, browser history and the visible filter silently diverge.
+  useEffect(() => {
+    const onPop = () => {
+      const seg = window.location.pathname.split("/")[1] ?? "";
+      setOwnerHandle(seg === "" ? null : seg);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
-  const visibleArchived = ownerHandle
-    ? archived.filter((p) => p.owner.handle === ownerHandle)
-    : archived;
+  const activeOwner = owners.find((o) => o.handle === ownerHandle) ?? null;
+  const accent = activeOwner?.accent ?? NEUTRAL_ACCENT;
+
+  const { live, archived, total } = useMemo(() => {
+    const byOwner = ownerHandle
+      ? projects.filter((p) => p.owner.handle === ownerHandle)
+      : projects;
+    const found = byOwner.filter((p) => matches(p, query));
+    return {
+      live: found.filter((p) => p.status !== "archived"),
+      archived: found.filter((p) => p.status === "archived"),
+      total: projects.length,
+    };
+  }, [projects, ownerHandle, query]);
 
   return (
-    <main>
-      <h1>eternalglitch.com</h1>
-      <p>
-        {visible.length} projects · {owners.length} operators
-      </p>
+    <div
+      // Every accent-aware thing downstream reads this one variable. Because it's a
+      // registered @property, changing it here crossfades the whole page instead of
+      // snapping — that's the retune.
+      style={
+        {
+          "--accent": accent,
+          transition: "--accent 220ms ease",
+        } as React.CSSProperties
+      }
+      className="mx-auto min-h-dvh w-full max-w-3xl px-5 py-14 sm:px-8 sm:py-20"
+    >
+      <header className="rise">
+        <h1 className="font-display text-[1.375rem] leading-none tracking-tight sm:text-[1.75rem]">
+          eternalglitch
+        </h1>
+        <div
+          aria-hidden
+          className="mt-3 h-px w-16 transition-colors duration-200"
+          style={{ background: "var(--accent)" }}
+        />
+        <p className="mt-4 max-w-[52ch] text-sm leading-relaxed text-mute">
+          {total} things running on one domain, built by two people.
+        </p>
+      </header>
 
-      <nav aria-label="Filter by owner">
-        <button
-          onClick={() => setOwnerHandle(null)}
-          aria-pressed={ownerHandle === null}
-        >
-          All
-        </button>
-        {owners.map((o) => (
-          <button
-            key={o.id}
-            onClick={() => setOwnerHandle(o.handle)}
-            aria-pressed={ownerHandle === o.handle}
-          >
-            {o.displayName}
-          </button>
-        ))}
-      </nav>
+      <div className="rise mt-10" style={{ animationDelay: "60ms" }}>
+        <FilterBar
+          owners={owners}
+          ownerHandle={ownerHandle}
+          onOwner={selectOwner}
+          query={query}
+          onQuery={setQuery}
+          count={projects.length}
+        />
+      </div>
 
-      {visible.length === 0 ? (
-        <p>Nothing here yet.</p>
-      ) : (
-        <ul>
-          {visible.map((p) => (
-            <ProjectRow key={p.id} project={p} />
-          ))}
-        </ul>
-      )}
-
-      {visibleArchived.length > 0 && (
-        <details>
-          <summary>+{visibleArchived.length} archived</summary>
-          <ul>
-            {visibleArchived.map((p) => (
-              <ProjectRow key={p.id} project={p} />
+      <main className="mt-8">
+        {live.length === 0 && archived.length === 0 ? (
+          <Empty query={query} owner={activeOwner} />
+        ) : (
+          <ul className="border-t border-line">
+            {live.map((p, i) => (
+              <ProjectRow key={p.id} project={p} index={i} />
             ))}
           </ul>
-        </details>
-      )}
-    </main>
-  );
-}
+        )}
 
-function ProjectRow({ project: p }: { project: ProjectWithOwner }) {
-  return (
-    <li>
-      <h2>{p.name}</h2>
-      <p>{p.description}</p>
-      <p>
-        {p.owner.displayName} · {p.type} · {p.host} · {p.status} · last active{" "}
-        {new Date(p.lastActive).getFullYear()}
-      </p>
-      <p>{p.stack.join(" · ")}</p>
-      <p>
-        <code>{p.url.replace(/^https?:\/\//, "")}</code>{" "}
-        <ProjectAction project={p} />
-      </p>
-    </li>
+        {archived.length > 0 && <Archived projects={archived} />}
+      </main>
+
+      <footer className="mt-16 font-mono text-eyebrow tracking-wider text-dim uppercase">
+        {owners.map((o) => o.displayName).join(" · ")}
+      </footer>
+    </div>
   );
 }
 
 /**
- * One action per row (D15). Frontend gets Visit, backend gets Copy.
- * No url (archived + dead deployment) → no button at all. The absence IS the signal.
+ * Archived stays visible but out of the primary flow (D12) — you keep the receipts
+ * without leading with them. Renders nothing when empty, which is the case today.
  */
-function ProjectAction({ project: p }: { project: ProjectWithOwner }) {
-  const [copied, setCopied] = useState(false);
+function Archived({ projects }: { projects: ProjectWithOwner[] }) {
+  const [open, setOpen] = useState(false);
 
-  if (p.url === "") return null;
-
-  if (isVisitable(p)) {
-    // MUST be an anchor, never <button onClick={() => location.href = ...}>.
-    // cmd/middle-click has to open a new tab — this page's entire job is sending
-    // people elsewhere. Also keeps it crawlable and keyboard-accessible for free.
-    return (
-      <a href={p.url} target="_blank" rel="noopener noreferrer">
-        Visit ↗
-      </a>
-    );
-  }
-
-  // Backend: not navigation, so a real button is correct here.
   return (
-    <button
-      onClick={async () => {
-        await navigator.clipboard.writeText(p.url);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-    >
-      {copied ? "Copied" : "Copy"}
-    </button>
+    <div className="mt-8">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="font-mono text-eyebrow tracking-wider text-dim uppercase transition-colors hover:text-mute"
+      >
+        {open ? "−" : "+"}
+        {projects.length} archived
+      </button>
+
+      {open && (
+        <ul className="mt-4 border-t border-line opacity-60">
+          {projects.map((p, i) => (
+            <ProjectRow key={p.id} project={p} index={i} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** An empty screen is an invitation to act, not a shrug. */
+function Empty({ query, owner }: { query: string; owner: Owner | null }) {
+  return (
+    <p className="border-t border-line py-16 text-sm text-mute">
+      {query
+        ? `No projects match "${query}".`
+        : owner
+          ? `${owner.displayName} hasn't put anything here yet.`
+          : "Nothing here yet."}
+    </p>
   );
 }
